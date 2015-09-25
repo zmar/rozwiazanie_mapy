@@ -1,0 +1,182 @@
+---
+title: Rozmieszczenie szkół podstawowych i gimnazjów w Warszawie (pakiet ggmap oraz
+  ggplot2)
+author: "CBOS"
+date: "23 września 2015 r."
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    theme: united
+    toc: yes
+---
+
+# Pobieranie mapy Warszawy 
+
+```{r, fig.width=6, fig.height=6}
+# install.packages("ggmap")
+library(ggmap)
+warszawa <- get_map(location = c(lon = 21.06, lat = 52.229048), zoom=11, source="google", language="pl",  color = "bw" ) # argument color pozwala zadecydowac czy mapa bedzie kolorowa
+warszawa <- ggmap(warszawa)                  
+warszawa
+```
+
+# Pobieranie kodów pocztowych
+
+## "Ładowanie danych"
+
+```{r, results='asis', }
+load("PNA_warszawa.RData")
+head(pna)
+```
+
+## Dodawanie identyfikatora i informacji o brzegu Wisły
+
+```{r}
+pna$brzeg<-"warszawski"
+pna$brzeg[pna$dzielnice %in% c("białołęka",  "praga-południe", "praga-północ", "rembertów", "targówek", "wawer", "wesoła")]<-"praski"
+pna$identyfikator<-paste(pna$PNA, pna$brzeg ,sep="_");
+pna<-pna[!duplicated(x = pna$identyfikator), ];
+pna<-pna[ , c("identyfikator", "PNA", "brzeg")];
+```
+
+
+# Szkoły niepubliczne
+
+## Pobieranie danych o szkołach
+
+Prosżę zwrócić uwagę, że nie używam całej ścieżki dostępu do plików, a jedynie ich nazw. To dlatego, że R domyślnie pracuje katalogu w którym znajduje się uruchominy skrypt. Domyślnie w tym katalogu dane są zapisywane i z niego są też pobierane. Katalog "roboczy" jest nazywamy __Working Directory__. 
+
+```{r}
+sp_niepubliczne<-read.csv2("sp_niepubliczne.csv")
+g_niepubliczne<-read.csv2("g_niepubliczne.csv")
+```
+
+Żeby sprawdzić w dowolnym momencie, gdzie znajduje się __Working Directory__ wystarczy użyć poniższej komendy:
+
+```{r}
+getwd()
+```
+
+A żeby zmienić:
+
+```{r}
+nowa.lokalizacja<-getwd() # nowa lokalizacja to adres nowego katalogu roboczego - w tym przypadku wykorzystano stary
+setwd(nowa.lokalizacja) 
+```
+
+## Dodawanie do szkól informacji o brzegu wisły
+
+### Niepubliczne szkoły podstawowe
+
+```{r}
+sp_niepubliczne_2<-merge(x = sp_niepubliczne, y = pna, by.x = "kod", by.y = "PNA", all.x = TRUE, all.y = FALSE)
+head(sp_niepubliczne_2)
+```
+
+### Niepubliczne gimnazja 
+
+```{r}
+g_niepubliczne_2<-merge(x = g_niepubliczne, y = pna, by.x = "kod", by.y = "PNA", all.x = TRUE, all.y = FALSE)
+head(g_niepubliczne_2)
+```
+
+## Rysowanie map dla szkół niepublicznych
+
+### Niepubliczne SZkoły podstawowe
+
+```{r, fig.width=6, fig.height=5, message=FALSE, warning=FALSE}
+par(mar = c(0,0,0,0))
+sp_niepubliczne_2$adres<-stringi::stri_enc_toutf8(sp_niepubliczne_2$adres) # kodowanie UTF-8
+wspolrzedne1<-geocode(sp_niepubliczne_2$adres)
+# dodawanie do szkol informacji o brzegu Wisły
+sp_niepubliczne_2<-data.frame(sp_niepubliczne_2, wspolrzedne1)
+# kolor na mapie na podstawie zmiennej brzeg
+par(mar = c(0,0,0,0))
+warszawa+
+  geom_point(data=sp_niepubliczne_2, aes(x=lon, y=lat, color=brzeg),  shape=20, size=4, lwd=7)
+```
+
+
+### Niepubliczne gimnazja
+
+```{r, fig.width=6, fig.height=5, message=FALSE, warning=FALSE}
+g_niepubliczne_2$adres<-stringi::stri_enc_toutf8(g_niepubliczne_2$adres)
+wspolrzedne2<-geocode(g_niepubliczne_2$adres)
+g_niepubliczne_2<-data.frame( g_niepubliczne_2, wspolrzedne2)
+warszawa+
+  geom_point(data=g_niepubliczne_2, aes(x=lon, y=lat, color=brzeg), shape=20, size=4, lwd=7)
+```
+
+### Niepubliczne SZkoły podstawowe i gimnazja razem
+
+Kształtem oznaczono brzeg wisły, a kolorem rodzaj placówki (szkoła podstawowa lub gimnazjum)
+
+```{r, fig.width=6, fig.height=5, message=FALSE, warning=FALSE}
+# dodawanie do zbiorow zmiennych, które pozwola rozroznic rodzaj szkoly
+sp_niepubliczne_2$rodzaj<-"szkoła podstawowa"
+g_niepubliczne_2$rodzaj<-"gimnazjum"
+# laczenie zbiorow przy pomocy komendy rbind - laczenie wierszami, czyli dodawanie do pierwszego zbioru wierszy z drugiego - UWAGA! w obu zbiorach kolumny musza miec takie same nazwy
+niepubliczne<-as.data.frame(rbind( sp_niepubliczne_2, g_niepubliczne_2) )
+# kolorem zaznaczono rodzaj szkoły a kształcem brzeg
+warszawa+
+  geom_point(data=niepubliczne, aes(x=lon, y=lat, shape=brzeg, color=rodzaj), size=4, lwd=7)
+```
+
+# Szkoły publiczne
+
+## Pobieranie danych o szkołach
+
+```{r}
+sp_publiczne<-read.csv2("sp_publiczne.csv")
+g_publiczne<-read.csv2("g_publiczne.csv")
+```
+
+## Dodawanie do szkól informacji o brzegu wisły
+
+### Szkoły podstawowe
+
+```{r}
+sp_publiczne_2<-merge(x = sp_publiczne, y = pna, by.x = "kod", by.y = "PNA", all.x = TRUE, all.y = FALSE)
+head(sp_publiczne_2)
+```
+
+### Gimanazja
+
+```{r}
+g_publiczne_2<-merge(x = g_publiczne, y = pna, by.x = "kod", by.y = "PNA", all.x = TRUE, all.y = FALSE)
+head(g_publiczne_2)
+```
+
+## Rysowanie map dla szkół publicznych
+
+### Publiczne szkoły podstawowe
+
+```{r, fig.width=6, fig.height=5, message=FALSE, warning=FALSE}
+sp_publiczne_2$rodzaj<-"szkoła podstawowa"
+sp_publiczne_2$adres<-stringi::stri_enc_toutf8(sp_publiczne_2$adres)
+wspolrzedne3<-geocode(sp_publiczne_2$adres)
+sp_publiczne_2<-data.frame( sp_publiczne_2, wspolrzedne3)
+warszawa+
+  geom_point(data=sp_publiczne_2, aes(x=lon, y=lat, size = uczniowie, color=rodzaj, shape=brzeg), color="blue")
+```
+
+### Publiczne gimnazja
+
+```{r, fig.width=6, fig.height=5, message=FALSE, warning=FALSE}
+g_publiczne_2$rodzaj<-"gimnazjum"
+g_publiczne_2$adres<-stringi::stri_enc_toutf8(g_publiczne_2$adres)
+wspolrzedne4<-geocode(g_publiczne_2$adres)
+g_publiczne_2<-data.frame( g_publiczne_2, wspolrzedne4)
+warszawa+
+  geom_point(data=g_publiczne_2, aes(x=lon, y=lat, size = uczniowie, color=rodzaj, shape=brzeg));
+```
+
+### Publiczne szkoły podstawowe i gimnazja razem 
+
+```{r, fig.width=6, fig.height=5, message=FALSE, warning=FALSE}
+publiczne<-as.data.frame( rbind(sp_publiczne_2, g_publiczne_2) )
+warszawa+
+  geom_point(data=publiczne, aes(x=lon, y=lat, size = uczniowie, color=rodzaj, shape=brzeg));
+```
+
